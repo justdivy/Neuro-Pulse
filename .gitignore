@@ -1,0 +1,9 @@
+# Node modules (too heavy)
+node_modules/
+
+# Security and environment variables
+.env
+
+# Build files
+dist/
+build/

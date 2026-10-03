@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { ShieldCheck, CheckCircle, Lock, User } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
 
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { login } = useAuth();
 
   // State for the login form
   const [formData, setFormData] = useState({
@@ -13,17 +15,17 @@ export default function Login() {
   });
 
   // State for incoming notifications (like successful logout)
-  const [notification, setNotification] = useState("");
+  const [notification, setNotification] = useState(
+    () => location.state?.notification ?? ""
+  );
 
-  // Listen for messages passed through React Router
+  // Auto-hide the notification after 4 seconds when it appears
   useEffect(() => {
-    if (location.state && location.state.notification) {
-      setNotification(location.state.notification);
-      // Auto-hide the notification after 4 seconds
-      const timer = setTimeout(() => setNotification(""), 4000);
-      return () => clearTimeout(timer);
-    }
-  }, [location]);
+    if (!notification) return;
+
+    const timer = setTimeout(() => setNotification(""), 4000);
+    return () => clearTimeout(timer);
+  }, [notification]);
 
   // Handle input changes
   const handleChange = (e) => {
@@ -39,30 +41,16 @@ export default function Login() {
     e.preventDefault();
     
     try {
-      const response = await fetch("http://localhost:5000/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData), // Sends { identifier, password }
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        // SUCCESS! Backend says this user is real.
-        localStorage.setItem("isAuthenticated", "true");
-        // Save the REAL data from MongoDB into localStorage
-        localStorage.setItem("currentUser", JSON.stringify(data.user));
-
+      const user = await login(formData);
+      if (user) {
         navigate("/dashboard", {
-          state: { notification: `Welcome back, ${data.user.name}!` },
+          state: { notification: `Welcome back, ${user.name}!` },
         });
-      } else {
-        // FAILURE! Show the error from the backend.
-        setNotification(`❌ ${data.message}`);
-        setTimeout(() => setNotification(""), 4000);
       }
     } catch (error) {
-      setNotification("❌ Could not connect to authentication server.");
+      console.error(error);
+      setNotification(`❌ ${error.message}`);
+      setTimeout(() => setNotification(""), 4000);
     }
   };
 
@@ -90,7 +78,7 @@ export default function Login() {
               <ShieldCheck className="w-12 h-12 text-cyan-400" strokeWidth={1.5} />
             </div>
             <h2 className="text-2xl font-bold text-white tracking-widest uppercase">
-              Tri-Sentinel
+              Neuro-Pulse
             </h2>
             <p className="text-slate-400 text-xs mt-2 uppercase tracking-widest font-semibold">
               Secure Access

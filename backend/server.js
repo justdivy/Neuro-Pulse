@@ -5,12 +5,78 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const PDFDocument = require("pdfkit");
 const VitalSign = require("./models/VitalSign");
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
 
 require("dotenv").config();
+
+const missingEnvironmentVariables = ["MONGODB_URI", "JWT_SECRET"].filter(
+  (name) => !process.env[name]
+);
+
+if (missingEnvironmentVariables.length > 0) {
+  throw new Error(
+    `Missing required environment variables: ${missingEnvironmentVariables.join(", ")}`
+  );
+}
 
 const app = express();
 const server = http.createServer(app);
 const User = require("./models/User")
+const JWT_SECRET = process.env.JWT_SECRET;
+
+function createUserProfile(user) {
+  return {
+    uid: user.uid,
+    name: user.name,
+    email: user.email,
+    institution: user.institution,
+    dateOfBirth: user.dateOfBirth || user.dob
+  };
+}
+
+async function removeLegacyProfileDefaults(user) {
+  let changed = false;
+
+  if (user.institution === "Chandigarh University, Mohali") {
+    user.institution = undefined;
+    changed = true;
+  }
+
+  if (user.dateOfBirth === "2002" || user.dob === "2002") {
+    user.dateOfBirth = undefined;
+    user.dob = undefined;
+    changed = true;
+  }
+
+  if (!user.dateOfBirth && user.dob && user.dob !== "2002") {
+    user.dateOfBirth = user.dob;
+    user.dob = undefined;
+    changed = true;
+  }
+
+  if (changed) {
+    await user.save();
+  }
+}
+
+function requireAuth(req, res, next) {
+  const authorization = req.headers.authorization;
+  const token = authorization?.startsWith("Bearer ")
+    ? authorization.slice(7)
+    : null;
+
+  if (!token) {
+    return res.status(401).json({ message: "Authentication required." });
+  }
+
+  try {
+    req.auth = jwt.verify(token, JWT_SECRET);
+    next();
+  } catch {
+    return res.status(401).json({ message: "Invalid or expired authentication token." });
+  }
+}
 
 // WebSockets - Connect backend to frontend
 const io = new Server(server, {
@@ -58,7 +124,7 @@ async function processAndSaveData(data) {
   // Step C: Save permanently to MongoDB
   try {
     const newRecord = new VitalSign({
-      patientId: data.patientId || '25MCI10161',
+      patientId: data.patientId,
       heartRate: data.heartRate,
       spO2: data.spO2,
       temp: data.temp,
@@ -89,27 +155,13 @@ io.on("connection", (socket) => {
   });
 });
 
-// Temporary Test Route (Fake Data Generator)
-setInterval(async () => {
-  const fakeData = {
-    patientId: '25MCI10161',
-    heartRate: Math.floor(Math.random() * (105 - 65 + 1) + 65), // Range tweaked to trigger AI alerts
-    spO2: Math.floor(Math.random() * (100 - 93 + 1) + 93),      // Range tweaked to trigger AI alerts
-    temp: parseFloat((Math.random() * (37.5 - 36.1) + 36.1).toFixed(1))
-  };
-  
-  // We pass the fake test data into the exact same pipeline!
-  await processAndSaveData(fakeData);
-}, 2000);
-
-
 // ==========================================
 // --- REST API ROUTES ---
 // ==========================================
 
 // Health Check Endpoint
 app.get("/api/health", (req, res) => {
-  res.status(200).json({ status: "Tri-Sentinel Backend is live" });
+  res.status(200).json({ status: "Neuro-Pulse Backend is live" });
 });
 
 // ==========================================
@@ -127,8 +179,8 @@ app.post("/api/auth/register", async (req, res) => {
       return res.status(400).json({ message: "User with this UID or Email already exists." });
     }
 
-    // Save to MongoDB
-    const newUser = new User({ uid, name, email, password });
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const newUser = new User({ uid, name, email, password: hashedPassword });
     await newUser.save();
 
     res.status(201).json({ message: "Registration successful!" });
@@ -148,31 +200,82 @@ app.post("/api/auth/login", async (req, res) => {
       $or: [{ email: identifier }, { uid: identifier }] 
     });
 
-    // Check if user exists AND password matches
-    if (!user || user.password !== password) {
+    const passwordMatches = user && user.password?.startsWith("$2")
+      ? await bcrypt.compare(password, user.password)
+      : user?.password === password;
+
+    if (!user || !passwordMatches) {
       return res.status(401).json({ message: "Invalid credentials. Access Denied." });
     }
 
-    // Success! Send back the user's profile data (excluding password)
-    const userProfile = {
-      uid: user.uid,
-      name: user.name,
-      email: user.email,
-      institution: user.institution,
-      dob: user.dob
-    };
+    if (!user.password.startsWith("$2")) {
+      user.password = await bcrypt.hash(password, 12);
+      await user.save();
+    }
 
-    res.status(200).json({ message: "Login successful", user: userProfile });
+    await removeLegacyProfileDefaults(user);
+    const userProfile = createUserProfile(user);
+    const token = jwt.sign({ sub: user._id.toString() }, JWT_SECRET, { expiresIn: "7d" });
+
+    res.status(200).json({ message: "Login successful", token, user: userProfile });
   } catch (error) {
     console.error("Login Error:", error);
     res.status(500).json({ message: "Server error during login." });
   }
 });
 
+// Restore and validate the current session after a page refresh.
+app.get("/api/auth/me", requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.auth.sub);
+
+    if (!user) {
+      return res.status(401).json({ message: "User account no longer exists." });
+    }
+
+    await removeLegacyProfileDefaults(user);
+    res.status(200).json({ user: createUserProfile(user) });
+  } catch (error) {
+    console.error("Session validation error:", error);
+    res.status(500).json({ message: "Server error during session validation." });
+  }
+});
+
+// Update profile fields for the currently authenticated user only.
+app.patch("/api/auth/me", requireAuth, async (req, res) => {
+  try {
+    const { institution, dateOfBirth } = req.body;
+    const user = await User.findById(req.auth.sub);
+
+    if (!user) {
+      return res.status(401).json({ message: "User account no longer exists." });
+    }
+
+    user.institution = typeof institution === "string" ? institution.trim() : "";
+    user.dateOfBirth = typeof dateOfBirth === "string" ? dateOfBirth.trim() : "";
+    user.dob = undefined;
+    await user.save();
+
+    res.status(200).json({ message: "Profile updated successfully.", user: createUserProfile(user) });
+  } catch (error) {
+    console.error("Profile update error:", error);
+    res.status(500).json({ message: "Server error while updating profile." });
+  }
+});
+
 // PDF Report Generator Route
-app.get('/api/reports/:patientId', async (req, res) => {
+app.get('/api/reports/:patientId', requireAuth, async (req, res) => {
   try {
     const { patientId } = req.params;
+    const user = await User.findById(req.auth.sub).select("uid");
+
+    if (!user) {
+      return res.status(401).json({ message: "User account no longer exists." });
+    }
+
+    if (patientId !== user.uid) {
+      return res.status(403).json({ message: "You are not authorized to access this report." });
+    }
     
     // 1. Fetch the last 50 readings from MongoDB for this patient
     const records = await VitalSign.find({ patientId })
@@ -188,14 +291,14 @@ app.get('/api/reports/:patientId', async (req, res) => {
     
     // Set headers so the browser knows it's receiving a PDF file to download
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=TriSentinel_Report_${patientId}.pdf`);
+    res.setHeader('Content-Disposition', `attachment; filename=NeuroPulse_Report_${patientId}.pdf`);
     
     // Pipe the PDF directly to the user's browser
     doc.pipe(res);
 
     // 3. Draw the PDF Content
     // Header
-    doc.fontSize(24).fillColor('#0891b2').text('TRI-SENTINEL', { align: 'center' });
+    doc.fontSize(24).fillColor('#0891b2').text('NEURO-PULSE', { align: 'center' });
     doc.fontSize(10).fillColor('gray').text('AI-Powered Continuous Health Surveillance', { align: 'center' });
     doc.moveDown(2);
 
@@ -243,7 +346,30 @@ app.get('/api/reports/:patientId', async (req, res) => {
   }
 });
 
+app.use("/api", (req, res) => {
+  res.status(404).json({ message: "API endpoint not found." });
+});
+
+app.use((error, req, res, next) => {
+  console.error("Unhandled API error:", error);
+  if (req.path.startsWith("/api")) {
+    return res.status(500).json({ message: "Unexpected server error." });
+  }
+  next(error);
+});
+
 const PORT = process.env.PORT || 5000;
+
+server.on("error", (error) => {
+  if (error.code === "EADDRINUSE") {
+    console.error(`Port ${PORT} is already in use. The Neuro-Pulse backend may already be running.`);
+    process.exit(1);
+  }
+
+  console.error("Backend server error:", error.message);
+  process.exit(1);
+});
+
 server.listen(PORT, () => {
   console.log(`🟢 Server is running on Port ${PORT}`);
 });

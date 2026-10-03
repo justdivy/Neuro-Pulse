@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { io } from "socket.io-client";
 import {
   LineChart,
   Line,
@@ -11,12 +12,15 @@ import {
 } from "recharts";
 
 export default function Monitoring() {
-  const navigate = useNavigate();
+  const { user, authLoading } = useAuth();
   const [chartData, setChartData] = useState([]);
+  const [isReceivingData, setIsReceivingData] = useState(false);
 
-  // Generate continuous fake data for the demo UI
   useEffect(() => {
-    const interval = setInterval(() => {
+    const socket = io("http://localhost:5000");
+
+    socket.on("frontend_dashboard_update", (data) => {
+      setIsReceivingData(true);
       setChartData((prevData) => {
         const newDataPoint = {
           time: new Date().toLocaleTimeString([], {
@@ -24,90 +28,34 @@ export default function Monitoring() {
             minute: "2-digit",
             second: "2-digit",
           }),
-          heartRate: Math.floor(Math.random() * (85 - 70 + 1) + 70),
-          spO2: Math.floor(Math.random() * (100 - 97 + 1) + 97),
+          ...data,
         };
         const updatedData = [...prevData, newDataPoint];
-        return updatedData.length > 30 ? updatedData.slice(1) : updatedData; // Keep 30 points for a wide graph
+        return updatedData.length > 30 ? updatedData.slice(1) : updatedData;
       });
-    }, 1000); // Updates every second for a smoother "live" feel
+    });
 
-    return () => clearInterval(interval);
+    return () => socket.disconnect();
   }, []);
 
-  return (
-    <div className="min-h-screen bg-slate-50 flex">
-      {/* Sidebar */}
-      <aside className="w-64 bg-slate-900 text-white flex flex-col">
-        <div className="p-6">
-          <Link
-            to="/"
-            className="text-2xl font-bold tracking-wider text-cyan-400 hover:text-cyan-300 transition-colors"
-          >
-            TriSentinel
-          </Link>
-        </div>
-        <nav className="flex-1 px-4 space-y-2">
-          <Link
-            to="/dashboard"
-            className="block py-2.5 px-4 text-slate-400 hover:bg-slate-800 hover:text-white rounded transition-colors"
-          >
-            Dashboard
-          </Link>
-          <Link
-            to="/monitoring"
-            className="block py-2.5 px-4 text-slate-400 hover:bg-slate-800 hover:text-white rounded transition-colors"
-          >
-            Monitoring
-          </Link>
-          <Link
-            to="/alerts"
-            className="block py-2.5 px-4 text-slate-400 hover:bg-slate-800 hover:text-white rounded transition-colors"
-          >
-            Alerts
-          </Link>
-          <Link
-            to="/reports"
-            className="block py-2.5 px-4 text-slate-400 hover:bg-slate-800 hover:text-white rounded transition-colors"
-          >
-            Reports
-          </Link>
-          <Link
-            to="/settings"
-            className="block py-2.5 px-4 text-slate-400 hover:bg-slate-800 hover:text-white rounded transition-colors"
-          >
-            Settings
-          </Link>
-        </nav>
-        <button
-          onClick={() =>
-            navigate("/login", {
-              state: {
-                notification:
-                  "Session closed. Securely logged out of Tri-Sentinel.",
-              },
-            })
-          }
-          className="m-4 p-3 bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded text-sm font-semibold transition-colors"
-        >
-          Secure Logout
-        </button>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 p-8 bg-slate-900 text-white">
+    return (
+      <main className="min-h-full p-8 bg-slate-900 text-white">
         <header className="mb-8 flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold text-cyan-400">
               Real-Time Monitoring
             </h1>
             <p className="text-slate-400">
-              Patient: D. Verma · Patch ID: TSA-2204
+              {authLoading
+                ? "Loading patient information..."
+                : user
+                  ? `Patient: ${user.name?.trim() || "Unknown Patient"} · Patient ID: ${user.uid?.trim() || "Not available"}`
+                  : "Patient information unavailable."}
             </p>
           </div>
-          <div className="px-4 py-2 bg-emerald-500/20 text-emerald-400 rounded-full font-semibold text-sm flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
-            LIVE
+          <div className={`${isReceivingData ? "bg-emerald-500/20 text-emerald-400" : "bg-amber-500/20 text-amber-400"} px-4 py-2 rounded-full font-semibold text-sm flex items-center gap-2`}>
+            <div className={`w-2 h-2 rounded-full ${isReceivingData ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`}></div>
+            {isReceivingData ? "RECEIVING" : "WAITING FOR DATA"}
           </div>
         </header>
 
@@ -149,6 +97,5 @@ export default function Monitoring() {
           </div>
         </div>
       </main>
-    </div>
   );
 }

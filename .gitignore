@@ -2,7 +2,9 @@
 node_modules/
 
 # Security and environment variables
-.env
+**/.env
+**/.env.*
+!**/.env.example
 
 # Build files
 dist/

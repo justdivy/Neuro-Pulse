@@ -2,14 +2,14 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 import random
 
-app = FastAPI(title="Tri-Sentinel AI Engine")
+app = FastAPI(title="Neuro-Pulse AI Engine")
 
 # Define the data structure we expect from Node.js
 class VitalSigns(BaseModel):
     heartRate: int
     spO2: int
     temp: float
-    patientId: str = "25MCI10161"
+    patientId: str
 
 @app.get("/")
 def read_root():

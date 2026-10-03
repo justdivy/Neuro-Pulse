@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useLocation, Link } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { io } from "socket.io-client";
 import { Activity, Droplet, Thermometer, CheckCircle } from "lucide-react";
 // IMPORT RECHARTS
@@ -14,7 +14,6 @@ import {
 } from "recharts";
 
 export default function Dashboard() {
-  const navigate = useNavigate();
   const location = useLocation();
 
   // State for the latest single reading (for the top cards)
@@ -26,8 +25,8 @@ export default function Dashboard() {
 
   // NEW: State for the rolling chart data (array of objects)
   const [chartData, setChartData] = useState([]);
+  const [hasReceivedData, setHasReceivedData] = useState(false);
 
-  const [isConnected, setIsConnected] = useState(false);
   const [notification, setNotification] = useState("");
 
   useEffect(() => {
@@ -37,11 +36,10 @@ export default function Dashboard() {
     }
 
     const socket = io("http://localhost:5000");
-    socket.on("connect", () => setIsConnected(true));
-    socket.on("disconnect", () => setIsConnected(false));
-
     // Handle incoming data
     socket.on("frontend_dashboard_update", (data) => {
+      setHasReceivedData(true);
+
       // 1. Update the top cards
       setVitals(data);
 
@@ -65,16 +63,8 @@ export default function Dashboard() {
     return () => socket.disconnect();
   }, [location]);
 
-  const handleLogout = () => {
-    navigate("/login", {
-      state: {
-        notification: "Session closed. Securely logged out of Tri-Sentinel.",
-      },
-    });
-  };
-
   return (
-    <div className="min-h-screen bg-slate-50 flex relative">
+    <div className="min-h-full bg-slate-50 relative">
       {/* Notification Toast */}
       {notification && (
         <div className="absolute top-6 left-1/2 transform -translate-x-1/2 bg-slate-900 border border-cyan-500/30 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 z-50 transition-all duration-500">
@@ -83,74 +73,8 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Sidebar */}
-      <aside className="w-64 bg-slate-900 text-white flex flex-col">
-        <div className="p-6">
-          <Link
-            to="/"
-            className="text-2xl font-bold tracking-wider text-cyan-400 hover:text-cyan-300 transition-colors"
-          >
-            TriSentinel
-          </Link>
-        </div>
-        <nav className="flex-1 px-4 space-y-2">
-          <Link
-            to="/dashboard"
-            className="block py-2.5 px-4 text-slate-400 hover:bg-slate-800 hover:text-white rounded transition-colors"
-          >
-            Dashboard
-          </Link>
-          <Link
-            to="/monitoring"
-            className="block py-2.5 px-4 text-slate-400 hover:bg-slate-800 hover:text-white rounded transition-colors"
-          >
-            Monitoring
-          </Link>
-          <Link
-            to="/alerts"
-            className="block py-2.5 px-4 text-slate-400 hover:bg-slate-800 hover:text-white rounded transition-colors"
-          >
-            Alerts
-          </Link>
-          <Link
-            to="/reports"
-            className="block py-2.5 px-4 text-slate-400 hover:bg-slate-800 hover:text-white rounded transition-colors"
-          >
-            Reports
-          </Link>
-          <Link
-            to="/settings"
-            className="block py-2.5 px-4 text-slate-400 hover:bg-slate-800 hover:text-white rounded transition-colors"
-          >
-            Settings
-          </Link>
-        </nav>
-        <div className="p-4 bg-slate-800 m-4 rounded flex items-center gap-3">
-          <div
-            className={`w-3 h-3 rounded-full ${isConnected ? "bg-green-500 animate-pulse" : "bg-red-500"}`}
-          ></div>
-          <span className="text-sm">
-            {isConnected ? "Patch Active" : "Disconnected"}
-          </span>
-        </div>
-        <button
-          onClick={() => {
-            localStorage.removeItem("isAuthenticated"); // Destroys the key
-            navigate("/login", {
-              state: {
-                notification:
-                  "Session closed. Securely logged out of Tri-Sentinel.",
-              },
-            });
-          }}
-          className="m-4 p-3 bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded text-sm font-semibold transition-colors"
-        >
-          Secure Logout
-        </button>
-      </aside>
-
       {/* Main Content */}
-      <main className="flex-1 p-8 overflow-y-auto">
+      <main className="p-8 overflow-y-auto">
         <header className="mb-8 flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold text-slate-800">
@@ -158,9 +82,13 @@ export default function Dashboard() {
             </h1>
             <p className="text-slate-500">Real-time Continuous Monitoring</p>
           </div>
-          <div className="px-4 py-2 bg-green-100 text-green-700 rounded-full font-semibold text-sm flex items-center gap-2 shadow-sm border border-green-200">
-            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>{" "}
-            System Normal
+          <div className={`px-4 py-2 rounded-full font-semibold text-sm flex items-center gap-2 shadow-sm border ${
+            hasReceivedData
+              ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+              : "bg-amber-100 text-amber-700 border-amber-200"
+          }`}>
+            <div className={`w-2 h-2 rounded-full ${hasReceivedData ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`}></div>
+            {hasReceivedData ? "Monitoring Live" : "Awaiting Live Data"}
           </div>
         </header>
 
@@ -215,7 +143,7 @@ export default function Dashboard() {
           {/* Heart Rate Graph */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
             <h3 className="font-bold text-slate-800 mb-4">
-              Live ECG Simulation
+              Live ECG Data
             </h3>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">

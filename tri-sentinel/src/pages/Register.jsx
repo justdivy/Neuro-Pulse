@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { ShieldCheck, User, Mail, Lock, Hash, AlertCircle } from "lucide-react";
+import { API_BASE_URL } from "../lib/api";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -29,7 +30,7 @@ export default function Register() {
     setErrorMsg("");
 
     try {
-      const response = await fetch("http://localhost:5000/api/auth/register", {
+      const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
@@ -74,7 +75,7 @@ export default function Register() {
               <ShieldCheck className="w-12 h-12 text-cyan-400" strokeWidth={1.5} />
             </div>
             <h2 className="text-2xl font-bold text-white tracking-widest uppercase">
-              Tri-Sentinel
+              Neuro-Pulse
             </h2>
             <p className="text-slate-400 text-xs mt-2 uppercase tracking-widest font-semibold">
               Device Registration

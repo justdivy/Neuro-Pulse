@@ -3,8 +3,7 @@ const mongoose = require('mongoose');
 const vitalSignSchema = new mongoose.Schema({
   patientId: {
     type: String,
-    required: true,
-    default: '25MCI10161' // Your UID!
+    required: true
   },
   heartRate: {
     type: Number,

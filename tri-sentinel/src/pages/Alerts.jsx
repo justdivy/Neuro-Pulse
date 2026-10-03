@@ -1,26 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Activity, ShieldAlert, BatteryWarning, CheckCircle } from 'lucide-react';
+import { Activity, ShieldAlert, CheckCircle } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 // Connect to your Node.js backend
 const socket = io('http://localhost:5000');
 
 export default function Alerts() {
-  const navigate = useNavigate();
-  
-  // We start with one "System Normal" alert so the screen isn't empty, 
-  // but new AI alerts will dynamically stack on top!
-  const [alerts, setAlerts] = useState([
-    {
-      id: 'system-start',
-      type: 'success',
-      title: 'Device Reconnected · Sync Complete',
-      message: 'System initialized and monitoring vitals securely.',
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      meta: 'Auto-resolved'
-    }
-  ]);
+  const [alerts, setAlerts] = useState([]);
 
   useEffect(() => {
     // Listen for real AI alerts from the Node backend
@@ -65,38 +51,8 @@ export default function Alerts() {
     }
   };
 
-  return (
-    <div className="flex h-screen bg-slate-50 font-sans">
-      
-      {/* Sidebar (Matches Dashboard) */}
-      <aside className="w-64 bg-[#0f172a] flex flex-col shadow-2xl z-20">
-        <div className="p-6">
-          <Link to="/" className="text-2xl font-bold tracking-wider text-cyan-400 hover:text-cyan-300 transition-colors">
-            Tri-Sentinel
-          </Link>
-        </div>
-        
-        <nav className="flex-1 px-4 space-y-2 mt-4">
-          <Link to="/dashboard" className="block py-2.5 px-4 text-slate-400 hover:bg-slate-800 hover:text-white rounded transition-colors">Dashboard</Link>
-          <Link to="/monitoring" className="block py-2.5 px-4 text-slate-400 hover:bg-slate-800 hover:text-white rounded transition-colors">Monitoring</Link>
-          <Link to="/alerts" className="block py-2.5 px-4 bg-slate-800 text-white rounded transition-colors">Alerts</Link>
-          <Link to="/reports" className="block py-2.5 px-4 text-slate-400 hover:bg-slate-800 hover:text-white rounded transition-colors">Reports</Link>
-          <Link to="/settings" className="block py-2.5 px-4 text-slate-400 hover:bg-slate-800 hover:text-white rounded transition-colors">Settings</Link>
-        </nav>
-
-        <button 
-          onClick={() => {
-            localStorage.removeItem('isAuthenticated');
-            navigate('/login', { state: { notification: 'Session closed. Securely logged out.' } });
-          }} 
-          className="m-4 p-3 bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded text-sm font-semibold transition-colors"
-        >
-          Secure Logout
-        </button>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 overflow-y-auto p-10 relative">
+    return (
+      <main className="min-h-full overflow-y-auto p-10 relative">
         <div className="max-w-4xl">
           <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Alerts & Notifications</h1>
           <p className="text-slate-500 mt-1 mb-8">Patient monitoring · Active alerts shown first</p>
@@ -142,6 +98,5 @@ export default function Alerts() {
           </div>
         </div>
       </main>
-    </div>
   );
 }

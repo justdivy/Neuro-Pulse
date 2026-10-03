@@ -10,15 +10,22 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "../context/AuthContext";
 
 export default function Home() {
   const navigate = useNavigate();
+  const { isAuthenticated, authLoading, logout } = useAuth();
   const [showPopup, setShowPopup] = useState(false);
 
   useEffect(() => {
+    if (authLoading || isAuthenticated) {
+      setShowPopup(false);
+      return;
+    }
+
     const timer = setTimeout(() => setShowPopup(true), 5000);
     return () => clearTimeout(timer);
-  }, []);
+  }, [authLoading, isAuthenticated]);
 
   // Animation Variants
   const fadeUp = {
@@ -63,7 +70,7 @@ export default function Home() {
         >
           <ShieldCheck className="w-8 h-8 text-cyan-400" />
           <span className="text-2xl font-extrabold tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
-            TRI-SENTINEL
+            NEURO-PULSE
           </span>
         </motion.div>
         <motion.div
@@ -71,17 +78,43 @@ export default function Home() {
           animate={{ opacity: 1, x: 0 }}
           className="gap-6 hidden md:flex items-center"
         >
-          <Link
-            to="/login"
-            className="text-sm font-semibold text-slate-300 hover:text-cyan-400 transition-colors"
-          >
-            Sign In
-          </Link>
+          {!authLoading && !isAuthenticated && (
+            <>
+              <Link
+                to="/login"
+                className="text-sm font-semibold text-slate-300 hover:text-cyan-400 transition-colors"
+              >
+                Sign In
+              </Link>
+              <Link
+                to="/register"
+                className="text-sm font-semibold text-slate-300 hover:text-cyan-400 transition-colors"
+              >
+                Sign Up
+              </Link>
+            </>
+          )}
+          {!authLoading && isAuthenticated && (
+            <>
+              <Link
+                to="/dashboard"
+                className="text-sm font-semibold text-slate-300 hover:text-cyan-400 transition-colors"
+              >
+                Dashboard
+              </Link>
+              <button
+                onClick={() => { logout(); navigate("/login"); }}
+                className="text-sm font-semibold text-slate-300 hover:text-cyan-400 transition-colors"
+              >
+                Logout
+              </button>
+            </>
+          )}
           <button
-            onClick={() => setShowPopup(true)}
+            onClick={() => isAuthenticated ? navigate("/dashboard") : setShowPopup(true)}
             className="px-6 py-2.5 bg-cyan-500/10 border border-cyan-500/50 hover:bg-cyan-500 hover:text-white text-cyan-400 rounded-full font-bold transition-all shadow-[0_0_20px_rgba(8,145,178,0.3)] hover:shadow-[0_0_30px_rgba(8,145,178,0.6)]"
           >
-            Launch Platform
+            {isAuthenticated ? "Open Dashboard" : "Launch Platform"}
           </button>
         </motion.div>
       </nav>
@@ -118,7 +151,7 @@ export default function Home() {
             className="text-lg md:text-xl text-slate-400 mb-8 max-w-xl leading-relaxed font-light"
           >
             The 3-in-1 continuous monitoring wearable. Powered by predictive AI,
-            Tri-Sentinel isolates critical events for{" "}
+            Neuro-Pulse isolates critical events for{" "}
             <span className="text-white font-medium">Cancer</span>,{" "}
             <span className="text-white font-medium">Cardiac</span>, and{" "}
             <span className="text-white font-medium">Diabetes</span> patients in
@@ -314,7 +347,7 @@ export default function Home() {
 
       {/* Smooth Modal Animation */}
       <AnimatePresence>
-        {showPopup && (
+        {showPopup && !authLoading && !isAuthenticated && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

@@ -19,13 +19,10 @@ const userSchema = new mongoose.Schema({
     type: String, 
     required: true 
 }, // In a real app, we would encrypt this!
-  institution: { 
-    type: String, 
-    default: "Chandigarh University, Mohali" 
-},
-  dob: { type: String, 
-    default: "2002" 
-},
+  institution: { type: String, trim: true },
+  dateOfBirth: { type: String, trim: true },
+  // Retained for existing documents created before dateOfBirth was introduced.
+  dob: { type: String, trim: true },
 });
 
 module.exports = mongoose.model("User", userSchema);
